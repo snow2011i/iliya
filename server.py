@@ -125,8 +125,8 @@ def make_vless_link(uuid: str, host: str, label: str, port: int = 443) -> str:
         "host": host,
         "path": path,
         "sni": host,
-        "fp": "chrome",
-        "alpn": "http/1.1",
+        "fp": "random",
+        "alpn": "",
     }
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     remark = quote(f"{BRAND}-{label}")
