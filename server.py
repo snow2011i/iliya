@@ -114,20 +114,29 @@ def get_host(request: Request | None = None) -> str:
             return h
     return CONFIG.get("host", DEFAULT_HOST)
 
+# تنظیمات لینک — این‌ها را می‌توانی همین‌جا تغییر دهی
+LINK_SETTINGS = {
+    "fp": "chrome",     # اثر انگشت: chrome / firefox / safari / random / خالی
+    "alpn": "",         # خالی = بدون alpn (بهترین حالت برای Railway)
+    "network": "ws",    # نوع شبکه
+    "security": "tls",  # امنیت
+}
 
 def make_vless_link(uuid: str, host: str, label: str, port: int = 443) -> str:
     """ساخت share-link استاندارد VLESS-over-WebSocket با برند Iliya."""
-    path = f"/iliya/{uuid}"
+    s = LINK_SETTINGS
     params = {
         "encryption": "none",
-        "security": "tls",
-        "type": "ws",
+        "security": s.get("security") or "tls",
+        "type": s.get("network") or "ws",
         "host": host,
-        "path": path,
+        "path": f"/iliya/{uuid}",
         "sni": host,
-        "fp": "random",
-        "alpn": "",
     }
+    if s.get("fp"):
+        params["fp"] = s["fp"]
+    if s.get("alpn"):
+        params["alpn"] = s["alpn"]
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     remark = quote(f"{BRAND}-{label}")
     return f"vless://{uuid}@{host}:{port}?{query}#{remark}"
@@ -223,6 +232,8 @@ async def load_state():
             async with aiofiles.open(STATE_FILE, "r", encoding="utf-8") as f:
                 data = json.loads(await f.read())
             CONFIGS.update(data.get("configs", {}))
+            if isinstance(data.get("link_settings"), dict):
+                LINK_SETTINGS.update(data["link_settings"])
             if data.get("password_hash"):
                 AUTH["password_hash"] = data["password_hash"]
             log.info(f"state loaded: {len(CONFIGS)} configs")
@@ -237,7 +248,7 @@ async def save_state():
         try:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             data = {"configs": CONFIGS, "password_hash": AUTH["password_hash"],
-                    "saved_at": now().isoformat()}
+                    "link_settings": LINK_SETTINGS, "saved_at": now().isoformat()}
             tmp = STATE_FILE.with_suffix(".tmp")
             async with aiofiles.open(tmp, "w", encoding="utf-8") as f:
                 await f.write(json.dumps(data, ensure_ascii=False, indent=2))
@@ -291,7 +302,7 @@ async def create_config(label: str, owner: str = BRAND, gb: float = 0,
 
 
 # ═══════════════════  VLESS RELAY (WebSocket)  ═══════════════════
-BUF = 256 * 1024
+BUF = 1024 * 1024
 
 
 def _ws_ip(ws: WebSocket) -> str:
@@ -492,6 +503,23 @@ async def change_password(request: Request, _=Depends(require_auth)):
     await save_state()
     return {"ok": True}
 
+@app.get("/api/settings")
+async def get_settings(_=Depends(require_auth)):
+    return {"link_settings": LINK_SETTINGS}
+
+@app.post("/api/settings")
+async def set_settings(request: Request):
+    tok = request.cookies.get(SESSION_COOKIE)
+    authed = tok in SESSIONS and SESSIONS.get(tok, 0) >= time.time()
+    if not authed and request.headers.get("x-bot-key") != BOT_API_KEY:
+        raise HTTPException(status_code=403, detail="forbidden")
+    b = await request.json()
+    for k in ("fp", "alpn", "network", "security"):
+        if k in b:
+            LINK_SETTINGS[k] = str(b.get(k) or "").strip()
+    await save_state()
+    return {"ok": True, "link_settings": LINK_SETTINGS}
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard():
@@ -588,13 +616,26 @@ async def del_config(uuid: str, request: Request, _=Depends(require_auth)):
 @app.get("/sub/{uuid}")
 async def subscription(uuid: str, request: Request):
     cfg = CONFIGS.get(uuid)
-    if not is_allowed(cfg):
-        raise HTTPException(status_code=404, detail="not found or inactive")
+    if not cfg:
+        raise HTTPException(status_code=404, detail="not found")
     host = get_host(request)
     link = make_vless_link(uuid, host, cfg.get("label", BRAND))
-    return Response(content=sub_base64([link]), media_type="text/plain",
-                    headers={"profile-title": quote(cfg.get("label", BRAND))})
-
+    used = int(cfg.get("used_bytes", 0))
+    total = int(cfg.get("limit_bytes", 0))
+    expire = 0
+    if cfg.get("expires_at"):
+        try:
+            expire = int(datetime.fromisoformat(cfg["expires_at"]).timestamp())
+        except Exception:
+            expire = 0
+    title = base64.b64encode(f"{BRAND} | {cfg.get('label', BRAND)}".encode()).decode()
+    headers = {
+        "subscription-userinfo": f"upload=0; download={used}; total={total}; expire={expire}",
+        "profile-title": "base64:" + title,
+        "profile-update-interval": "12",
+        "profile-web-page-url": f"https://{host}/p/{uuid}",
+    }
+    return Response(content=sub_base64([link]), media_type="text/plain", headers=headers)
 
 @app.get("/p/{uuid}", response_class=HTMLResponse)
 async def public_page(uuid: str, request: Request):
