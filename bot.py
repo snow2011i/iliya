@@ -31,7 +31,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8825265471:AAG7rqttcPs16NRH6ZjKWKVUd3Tq3TW2k
 ADMIN_IDS = [2025464333]  # مثلاً: [123456789, 987654321]
 
 # آدرس سرور Iliya Gateway (همان server.py که روی Railway دیپلوی می‌کنید):
-SERVER_URL = os.getenv("SERVER_URL", "https://your-app.up.railway.app")
+SERVER_URL = os.getenv("SERVER_URL", "https://web-production-cd21b9.up.railway.app")
 
 # کلید ارتباط ربات و سرور (باید دقیقاً با BOT_API_KEY در server.py یکی باشد):
 BOT_API_KEY = os.getenv("BOT_API_KEY", "iliya-secret-bridge")
