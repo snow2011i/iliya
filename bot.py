@@ -91,8 +91,7 @@ def save_state(s):
 
 
 STATE = load_state()
-
-
+    
 def get_user(uid, name="", ref=None):
     uid = str(uid)
     u = STATE["users"].get(uid)
@@ -210,6 +209,27 @@ def server_create(label, owner, gb, days, users, speed=0, is_test=False):
         print("server_create failed:", r.status_code, r.text)
     except Exception as e:
         print("server_create error:", e)
+    return None
+
+
+def server_get_settings():
+    try:
+        r = HTTP.get(SERVER_URL + "/api/settings",
+                     headers={"X-Bot-Key": BOT_API_KEY}, timeout=15)
+        if r.status_code == 200:
+            return r.json().get("link_settings", {})
+    except Exception as e:
+        print("get_settings error:", e)
+    return {}
+
+def server_set_settings(**kw):
+    try:
+        r = HTTP.post(SERVER_URL + "/api/settings",
+                      headers={"X-Bot-Key": BOT_API_KEY}, json=kw, timeout=15)
+        if r.status_code == 200:
+            return r.json().get("link_settings", {})
+    except Exception as e:
+        print("set_settings error:", e)
     return None
 
 
@@ -487,6 +507,28 @@ def do_wheel(chat_id, uid, cb_id, mid):
 # ─────────────────────────────────── پنل مدیریت ────────────────────────
 def is_admin(uid):
     return int(uid) in ADMIN_IDS
+
+def show_admin_settings(chat_id, uid, mid):
+    if not is_admin(uid):
+        return
+    s = server_get_settings()
+    fp = s.get("fp") or "—"
+    alpn = s.get("alpn") or "بدون (خالی)"
+    net = s.get("network") or "ws"
+    sec = s.get("security") or "tls"
+    txt = ("🎨 تنظیمات کانفیگ \n\n"
+           "روی همه‌ی کانفیگ‌های جدید اعمال می‌شود:\n\n"
+           "🔹 اثر انگشت: " + fp + "\n"
+           "🔹 alpn: " + alpn + "\n"
+           "🔹 شبکه: " + net + " | امنیت: " + sec + "\n\n"
+           "برای تغییر، یکی را انتخاب کنید:")
+    kb = [
+        [btn("اثرانگشت: Chrome", "setfp:chrome"), btn("Firefox", "setfp:firefox")],
+        [btn("Safari", "setfp:safari"), btn("Random", "setfp:random"), btn("بدون", "setfp:")],
+        [btn("alpn: بدون (پیشنهادی)", "setalpn:"), btn("http/1.1", "setalpn:http/1.1")],
+        back_btn("admin"),
+    ]
+    edit(chat_id, mid, txt, kb)
 
 
 def show_admin(chat_id, uid, mid):
