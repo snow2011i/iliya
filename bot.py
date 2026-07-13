@@ -25,10 +25,10 @@ import httpx
 # ╚══════════════════════════════════════════════════════╝
 
 # توکن ربات را از @BotFather بگیرید:
-BOT_TOKEN = os.getenv("BOT_TOKEN", "اینجا-توکن-ربات-را-بگذارید")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8825265471:AAG7rqttcPs16NRH6ZjKWKVUd3Tq3TW2kqg")
 
 # آیدی عددی مدیر(ان). از @userinfobot بگیرید. می‌توان چند نفر بود:
-ADMIN_IDS = [123456789]  # مثلاً: [123456789, 987654321]
+ADMIN_IDS = [2025464333]  # مثلاً: [123456789, 987654321]
 
 # آدرس سرور Iliya Gateway (همان server.py که روی Railway دیپلوی می‌کنید):
 SERVER_URL = os.getenv("SERVER_URL", "https://your-app.up.railway.app")
