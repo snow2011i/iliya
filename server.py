@@ -122,7 +122,7 @@ LINK_SETTINGS = {
     "network": "ws",    # نوع شبکه
     "security": "tls",  # امنیت
 }
-
+SERVER_GEO = {"country": "", "code": "", "flag": ""}
 def make_vless_link(uuid: str, host: str, label: str, port: int = 443, fp: str = "random", alpn: str = "", remark_override=None) -> str:
     path = f"/iliya/{uuid}"
     params = {"encryption": "none", "security": "tls", "type": "ws", "host": host, "path": path, "sni": host}
@@ -137,7 +137,6 @@ def make_vless_link(uuid: str, host: str, label: str, port: int = 443, fp: str =
         name = ((SERVER_GEO.get("flag", "") + " " + SERVER_GEO.get("country", "")).strip()) or BRAND
         remark = quote(f"{name} | {label}")
     return f"vless://{uuid}@{host}:{port}?{query}#{remark}"
-    SERVER_GEO = {"country": "", "code": "", "flag": ""}
 def _flag(code):
     code = (code or "").upper()
     if len(code) != 2 or not code.isalpha():
