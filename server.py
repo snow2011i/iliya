@@ -155,6 +155,7 @@ async def detect_geo():
         log.warning("geo failed: " + str(e))
 def sub_base64(links: list[str]) -> str:
     return base64.b64encode("\n".join(links).encode()).decode()
+SUB_VARIANTS = []
 TEST_COMBOS = [(fp, alpn) for fp in ["chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized", ""] for alpn in ["", "h2", "http/1.1", "h2,http/1.1"]]
   def _remaining_info(cfg):
     lim = int(cfg.get("limit_bytes", 0) or 0)
