@@ -612,31 +612,41 @@ async def del_config(uuid: str, request: Request, _=Depends(require_auth)):
     return {"ok": True}
 
 
-# ── Subscription ─────────────────────────────────────────────
+# ── Subscription ────────────────────────────────────────────
 @app.get("/sub/{uuid}")
 async def subscription(uuid: str, request: Request):
     cfg = CONFIGS.get(uuid)
     if not cfg:
         raise HTTPException(status_code=404, detail="not found")
     host = get_host(request)
+
+    # اگر در مرورگر باز شد، صفحه‌ی گرافیکی با حجم/انقضا نشان بده
+    if "text/html" in request.headers.get("accept", ""):
+        return HTMLResponse(sub_page_html(BRAND, public_config(uuid, cfg, host)))
+
+    # در غیر این صورت (ایمپورت در اپ): محتوای اشتراک + هدر مصرف
+    if not is_allowed(cfg):
+        raise HTTPException(status_code=404, detail="inactive")
     link = make_vless_link(uuid, host, cfg.get("label", BRAND))
-    used = int(cfg.get("used_bytes", 0))
-    total = int(cfg.get("limit_bytes", 0))
+    used = int(cfg.get("used_bytes", 0) or 0)
+    total = int(cfg.get("limit_bytes", 0) or 0)
     expire = 0
-    if cfg.get("expires_at"):
+    exp = cfg.get("expires_at")
+    if exp:
         try:
-            expire = int(datetime.fromisoformat(cfg["expires_at"]).timestamp())
+            expire = int(datetime.fromisoformat(exp).timestamp())
         except Exception:
             expire = 0
-    title = base64.b64encode(f"{BRAND} | {cfg.get('label', BRAND)}".encode()).decode()
+    userinfo = "upload=0; download=" + str(used) + "; total=" + str(total) + "; expire=" + str(expire)
+    title = base64.b64encode((BRAND + " | " + str(cfg.get("label", BRAND))).encode()).decode()
     headers = {
-        "subscription-userinfo": f"upload=0; download={used}; total={total}; expire={expire}",
-        "profile-title": "base64:" + title,
+        "subscription-userinfo": userinfo,
         "profile-update-interval": "12",
-        "profile-web-page-url": f"https://{host}/p/{uuid}",
+        "profile-title": "base64:" + title,
+        "profile-web-page-url": "https://" + host + "/p/" + uuid,
     }
     return Response(content=sub_base64([link]), media_type="text/plain", headers=headers)
-
+  
 @app.get("/p/{uuid}", response_class=HTMLResponse)
 async def public_page(uuid: str, request: Request):
     cfg = CONFIGS.get(uuid)
