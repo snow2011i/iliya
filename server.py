@@ -123,24 +123,19 @@ LINK_SETTINGS = {
     "security": "tls",  # امنیت
 }
 
-def make_vless_link(uuid: str, host: str, label: str, port: int = 443) -> str:
-    """ساخت share-link استاندارد VLESS-over-WebSocket با برند Iliya."""
-    s = LINK_SETTINGS
-    params = {
-        "encryption": "none",
-        "security": s.get("security") or "tls",
-        "type": s.get("network") or "ws",
-        "host": host,
-        "path": f"/iliya/{uuid}",
-        "sni": host,
-    }
-    if s.get("fp"):
-        params["fp"] = s["fp"]
-    if s.get("alpn"):
-        params["alpn"] = s["alpn"]
+def make_vless_link(uuid: str, host: str, label: str, port: int = 443, fp: str = "random", alpn: str = "", remark_override=None) -> str:
+    path = f"/iliya/{uuid}"
+    params = {"encryption": "none", "security": "tls", "type": "ws", "host": host, "path": path, "sni": host}
+    if fp:
+        params["fp"] = fp
+    if alpn:
+        params["alpn"] = alpn
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
-    name = ((SERVER_GEO.get("flag", "") + " " + SERVER_GEO.get("country", "")).strip()) or BRAND
-    remark = quote(f"{name} | {label}")
+    if remark_override is not None:
+        remark = quote(remark_override)
+    else:
+        name = ((SERVER_GEO.get("flag", "") + " " + SERVER_GEO.get("country", "")).strip()) or BRAND
+        remark = quote(f"{name} | {label}")
     return f"vless://{uuid}@{host}:{port}?{query}#{remark}"
     SERVER_GEO = {"country": "", "code": "", "flag": ""}
 def _flag(code):
@@ -161,7 +156,20 @@ async def detect_geo():
         log.warning("geo failed: " + str(e))
 def sub_base64(links: list[str]) -> str:
     return base64.b64encode("\n".join(links).encode()).decode()
-
+SUB_VARIANTS = [{"fp": "chrome", "alpn": ""}, {"fp": "firefox", "alpn": ""}, {"fp": "safari", "alpn": ""}, {"fp": "ios", "alpn": "h2,http/1.1"}, {"fp": "randomized", "alpn": "http/1.1"}]
+def _remaining_info(cfg):
+    lim = int(cfg.get("limit_bytes", 0) or 0)
+    used = int(cfg.get("used_bytes", 0) or 0)
+    vol = "نامحدود" if lim <= 0 else fmt_bytes(max(0, lim - used))
+    exp = cfg.get("expires_at")
+    if not exp:
+        days = "نامحدود"
+    else:
+        try:
+            days = str(max(0, (datetime.fromisoformat(exp) - now()).days))
+        except Exception:
+            days = "?"
+    return vol, days
 
 def is_expired(cfg: dict) -> bool:
     exp = cfg.get("expires_at")
@@ -636,15 +644,15 @@ async def subscription(uuid: str, request: Request):
     if not cfg:
         raise HTTPException(status_code=404, detail="not found")
     host = get_host(request)
-
-    # اگر در مرورگر باز شد، صفحه‌ی گرافیکی با حجم/انقضا نشان بده
     if "text/html" in request.headers.get("accept", ""):
         return HTMLResponse(sub_page_html(BRAND, public_config(uuid, cfg, host)))
-
-    # در غیر این صورت (ایمپورت در اپ): محتوای اشتراک + هدر مصرف
     if not is_allowed(cfg):
         raise HTTPException(status_code=404, detail="inactive")
-    link = make_vless_link(uuid, host, cfg.get("label", BRAND))
+    vol, days = _remaining_info(cfg)
+    label = cfg.get("label", BRAND)
+    links = [make_vless_link(uuid, host, label, remark_override="📊 حجم باقیمانده: " + vol), make_vless_link(uuid, host, label, remark_override="⏳ روز باقیمانده: " + days)]
+    for i, v in enumerate(SUB_VARIANTS, 1):
+        links.append(make_vless_link(uuid, host, label + " " + str(i), fp=v["fp"], alpn=v["alpn"]))
     used = int(cfg.get("used_bytes", 0) or 0)
     total = int(cfg.get("limit_bytes", 0) or 0)
     expire = 0
@@ -655,14 +663,9 @@ async def subscription(uuid: str, request: Request):
         except Exception:
             expire = 0
     userinfo = "upload=0; download=" + str(used) + "; total=" + str(total) + "; expire=" + str(expire)
-    title = base64.b64encode((BRAND + " | " + str(cfg.get("label", BRAND))).encode()).decode()
-    headers = {
-        "subscription-userinfo": userinfo,
-        "profile-update-interval": "12",
-        "profile-title": "base64:" + title,
-        "profile-web-page-url": "https://" + host + "/p/" + uuid,
-    }
-    return Response(content=sub_base64([link]), media_type="text/plain", headers=headers)
+    title = base64.b64encode((BRAND + " | " + str(label)).encode()).decode()
+    headers = {"subscription-userinfo": userinfo, "profile-update-interval": "12", "profile-title": "base64:" + title, "profile-web-page-url": "https://" + host + "/p/" + uuid}
+    return Response(content=sub_base64(links), media_type="text/plain", headers=headers)
   
 @app.get("/p/{uuid}", response_class=HTMLResponse)
 async def public_page(uuid: str, request: Request):
