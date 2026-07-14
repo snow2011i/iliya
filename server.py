@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 import aiofiles
+import httpx
 import uvicorn
 from fastapi import (Depends, FastAPI, Header, HTTPException, Request, WebSocket,
                      WebSocketDisconnect)
@@ -138,10 +139,26 @@ def make_vless_link(uuid: str, host: str, label: str, port: int = 443) -> str:
     if s.get("alpn"):
         params["alpn"] = s["alpn"]
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
-    remark = quote(f"{BRAND}-{label}")
+    name = ((SERVER_GEO.get("flag", "") + " " + SERVER_GEO.get("country", "")).strip()) or BRAND
+    remark = quote(f"{name} | {label}")
     return f"vless://{uuid}@{host}:{port}?{query}#{remark}"
-
-
+    SERVER_GEO = {"country": "", "code": "", "flag": ""}
+def _flag(code):
+    code = (code or "").upper()
+    if len(code) != 2 or not code.isalpha():
+        return ""
+    return "".join(chr(0x1F1E6 + ord(c) - ord("A")) for c in code)
+async def detect_geo():
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get("http://ip-api.com/json/?fields=country,countryCode")
+            if r.status_code == 200:
+                d = r.json()
+                SERVER_GEO["country"] = d.get("country", "") or ""
+                SERVER_GEO["code"] = d.get("countryCode", "") or ""
+                SERVER_GEO["flag"] = _flag(SERVER_GEO["code"])
+    except Exception as e:
+        log.warning("geo failed: " + str(e))
 def sub_base64(links: list[str]) -> str:
     return base64.b64encode("\n".join(links).encode()).decode()
 
