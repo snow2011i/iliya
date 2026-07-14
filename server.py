@@ -123,13 +123,12 @@ LINK_SETTINGS = {
     "security": "tls",  # امنیت
 }
 SERVER_GEO = {"country": "", "code": "", "flag": ""}
-def make_vless_link(uuid: str, host: str, label: str, port: int = 443, fp: str = "random", alpn: str = "", remark_override=None) -> str:
-    path = f"/iliya/{uuid}"
-    params = {"encryption": "none", "security": "tls", "type": "ws", "host": host, "path": path, "sni": host}
-    if fp:
-        params["fp"] = fp
-    if alpn:
-        params["alpn"] = alpn
+def make_vless_link(uuid: str, host: str, label: str, port: int = 443, fp: str = "chrome", alpn: str = "http/1.1", remark_override=None) -> str:
+    # فرمت دقیقاً مطابق X4G (نسخه‌ای که روی نت خونه کار می‌کند): type=ws، path=/ws/{uuid}، fp و alpn همیشه حاضر
+    fp_val = (fp or "").strip() or "chrome"
+    alpn_val = (alpn or "").strip() or "http/1.1"
+    path = f"/ws/{uuid}"
+    params = {"encryption": "none", "security": "tls", "type": "ws", "host": host, "path": path, "sni": host, "fp": fp_val, "alpn": alpn_val}
     query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
     if remark_override is not None:
         remark = quote(remark_override)
@@ -225,7 +224,7 @@ def public_config(uuid: str, cfg: dict, host: str) -> dict:
         "ip_limit": cfg.get("ip_limit", 0),
         "is_test": cfg.get("is_test", False),
         "created_at": cfg.get("created_at"),
-        "link": make_xhttp_link(uuid, host, "stream-up", cfg.get("label", BRAND)),
+        "link": make_vless_link(uuid, host, cfg.get("label", BRAND), fp="chrome", alpn="http/1.1"),
         "sub": f"https://{host}/sub/{uuid}",
     }
 
@@ -666,8 +665,9 @@ async def subscription(uuid: str, request: Request):
     vol, days = _remaining_info(cfg)
     label = cfg.get("label", BRAND)
     links = [make_vless_link(uuid, host, label, remark_override="📊 حجم باقیمانده: " + vol), make_vless_link(uuid, host, label, remark_override="⏳ روز باقیمانده: " + days)]
-    links.append(make_xhttp_link(uuid, host, "stream-up", label, remark_override="🟢 XHTTP stream-up (نت خونه)"))
-    links.append(make_xhttp_link(uuid, host, "packet-up", label, remark_override="🟡 XHTTP packet-up (نت خونه)"))
+    links.append(make_vless_link(uuid, host, label, fp="chrome", alpn="http/1.1", remark_override="🟢 WS پیشنهادی (نت خونه) • chrome/http1.1"))
+    links.append(make_xhttp_link(uuid, host, "stream-up", label, remark_override="🔵 XHTTP stream-up"))
+    links.append(make_xhttp_link(uuid, host, "packet-up", label, remark_override="🟡 XHTTP packet-up"))
     for i, combo in enumerate(TEST_COMBOS, 1):
         rk = str(i) + " · fp=" + (combo[0] or "none") + " · alpn=" + (combo[1] or "none")
         links.append(make_vless_link(uuid, host, label, fp=combo[0], alpn=combo[1], remark_override=rk))
@@ -1131,6 +1131,8 @@ async def stream_up_upload(uuid: str, session_id: str, request: Request):
     return {"ok": True}
 
 
+# روت WS اضافه مطابق X4G — کانفیگ‌های جدید از /ws/ استفاده می‌کنند؛ /iliya/ برای سازگاری قدیمی می‌ماند
+app.add_api_websocket_route("/ws/{uuid}", ws_tunnel)
 app.include_router(router)
 
 
