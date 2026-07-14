@@ -155,7 +155,8 @@ async def detect_geo():
         log.warning("geo failed: " + str(e))
 def sub_base64(links: list[str]) -> str:
     return base64.b64encode("\n".join(links).encode()).decode()
-SUB_VARIANTS = [{"fp": "chrome", "alpn": ""}, {"fp": "firefox", "alpn": ""}, {"fp": "safari", "alpn": ""}, {"fp": "ios", "alpn": "h2,http/1.1"}, {"fp": "randomized", "alpn": "http/1.1"}]
+SUB_VARIANTS = FP_LIST = ["chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized", ""]
+ALPN_LIST = ["", "h2", "http/1.1", "h2,http/1.1"]
 def _remaining_info(cfg):
     lim = int(cfg.get("limit_bytes", 0) or 0)
     used = int(cfg.get("used_bytes", 0) or 0)
@@ -472,6 +473,7 @@ async def ws_tunnel(ws: WebSocket, uuid: str):
 @app.on_event("startup")
 async def _startup():
     await load_state()
+    await detect_geo()
     log_act("system", "سرور Iliya راه‌اندازی شد", "ok")
     log.info(f"Iliya Gateway up on :{PORT}")
 
@@ -650,8 +652,12 @@ async def subscription(uuid: str, request: Request):
     vol, days = _remaining_info(cfg)
     label = cfg.get("label", BRAND)
     links = [make_vless_link(uuid, host, label, remark_override="📊 حجم باقیمانده: " + vol), make_vless_link(uuid, host, label, remark_override="⏳ روز باقیمانده: " + days)]
-    for i, v in enumerate(SUB_VARIANTS, 1):
-        links.append(make_vless_link(uuid, host, label + " " + str(i), fp=v["fp"], alpn=v["alpn"]))
+    for i = 0
+    for fp in FP_LIST:
+        for alpn in ALPN_LIST:
+            i += 1
+            rk = str(i) + " · fp=" + (fp or "none") + " · alpn=" + (alpn or "none")
+            links.append(make_vless_link(uuid, host, label, fp=fp, alpn=alpn, remark_override=rk))
     used = int(cfg.get("used_bytes", 0) or 0)
     total = int(cfg.get("limit_bytes", 0) or 0)
     expire = 0
